@@ -2,10 +2,10 @@ name: Go CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     tags: ["v*.*.*"]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   build-and-test:

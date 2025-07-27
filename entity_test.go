@@ -1,14 +1,14 @@
-package entity_test
+package scada_test
 
 import (
 	"testing"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
-	"github.com/kalogs-c/scada/entity"
+	"github.com/kalogs-c/scada"
 )
 
 func TestNewRectangle(t *testing.T) {
-	e := entity.Entity{
+	e := scada.Entity{
 		Position:   rl.Vector2{X: 10, Y: 20},
 		Dimensions: rl.Vector2{X: 30, Y: 40},
 	}
@@ -27,17 +27,17 @@ func TestNewRectangle(t *testing.T) {
 func TestCheckCollisionWith(t *testing.T) {
 	tests := []struct {
 		name     string
-		e1       entity.Entity
-		e2       entity.Entity
+		e1       scada.Entity
+		e2       scada.Entity
 		expected bool
 	}{
 		{
 			name: "Colliding entities",
-			e1: entity.Entity{
+			e1: scada.Entity{
 				Position:   rl.Vector2{X: 0, Y: 0},
 				Dimensions: rl.Vector2{X: 10, Y: 10},
 			},
-			e2: entity.Entity{
+			e2: scada.Entity{
 				Position:   rl.Vector2{X: 5, Y: 5},
 				Dimensions: rl.Vector2{X: 10, Y: 10},
 			},
@@ -45,11 +45,11 @@ func TestCheckCollisionWith(t *testing.T) {
 		},
 		{
 			name: "Non-colliding entities",
-			e1: entity.Entity{
+			e1: scada.Entity{
 				Position:   rl.Vector2{X: 0, Y: 0},
 				Dimensions: rl.Vector2{X: 10, Y: 10},
 			},
-			e2: entity.Entity{
+			e2: scada.Entity{
 				Position:   rl.Vector2{X: 20, Y: 20},
 				Dimensions: rl.Vector2{X: 5, Y: 5},
 			},
@@ -57,11 +57,11 @@ func TestCheckCollisionWith(t *testing.T) {
 		},
 		{
 			name: "Touching edges but not overlapping",
-			e1: entity.Entity{
+			e1: scada.Entity{
 				Position:   rl.Vector2{X: 0, Y: 0},
 				Dimensions: rl.Vector2{X: 10, Y: 10},
 			},
-			e2: entity.Entity{
+			e2: scada.Entity{
 				Position:   rl.Vector2{X: 10, Y: 0},
 				Dimensions: rl.Vector2{X: 5, Y: 5},
 			},

@@ -1,15 +1,14 @@
-package engine
+package scada
 
 import (
 	rl "github.com/gen2brain/raylib-go/raylib"
-	"github.com/kalogs-c/scada/state"
 )
 
 type Engine struct {
-	sm *state.StateMachine
+	sm *StateMachine
 }
 
-func NewEngine(sm *state.StateMachine) Engine {
+func NewEngine(sm *StateMachine) Engine {
 	return Engine{sm}
 }
 

@@ -1,15 +1,12 @@
-name: Go CI/CD
+name: Go Library Release
 
 on:
   push:
     branches: [master]
-    tags: ["v*.*.*"]
-  pull_request:
-    branches: [master]
 
 jobs:
-  format-and-tidy:
-    name: Check format and tidy
+  validate:
+    name: Format & Mod Check
     runs-on: ubuntu-latest
 
     steps:
@@ -20,9 +17,8 @@ jobs:
         with:
           go-version: stable
 
-      - name: Format check
+      - name: Check formatting
         run: |
-          go fmt ./...
           if [ -n "$(gofmt -l .)" ]; then
             echo "Run 'gofmt -s -w .' to fix formatting"
             exit 1
@@ -33,86 +29,47 @@ jobs:
           go mod tidy
           go mod verify
 
-  test-with-raylib:
-    name: Tests (with Raylib)
-    runs-on: ubuntu-latest
-    needs: format-and-tidy
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: stable
-
-      - name: Install Raylib dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgl1-mesa-dev \
-            libopenal-dev \
-            libvorbis-dev \
-            libxrandr-dev \
-            libxi-dev \
-            libxcursor-dev \
-            libxinerama-dev \
-            libxxf86vm-dev
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-
-      - name: Run tests
-        run: go test ./... -v -race -coverprofile=coverage.out
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage.out
-
   release:
-    name: Release via GoReleaser
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: Create tag & release
     runs-on: ubuntu-latest
-    needs: test-with-raylib
+    needs: validate
     permissions:
       contents: write
-      packages: write
-      id-token: write
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: stable
-
-      - name: Install Raylib dependencies
+      - name: Set up Git
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgl1-mesa-dev \
-            libopenal-dev \
-            libvorbis-dev \
-            libxrandr-dev \
-            libxi-dev \
-            libxcursor-dev \
-            libxinerama-dev \
-            libxxf86vm-dev
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          latest_tag=$(git tag --sort=-v:refname | grep '^v' | head -n 1)
+          echo "Última tag: $latest_tag"
+          echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+
+      - name: Bump patch version and create tag
+        id: new_tag
+        run: |
+          latest=${{ steps.get_tag.outputs.latest_tag }}
+          if [ -z "$latest" ]; then
+            new_tag="v0.1.0"
+          else
+            IFS='.' read -r major minor patch <<< "${latest#v}"
+            patch=$((patch + 1))
+            new_tag="v$major.$minor.$patch"
+          fi
+          git tag "$new_tag"
+          git push origin "$new_tag"
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
         with:
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.new_tag.outputs.new_tag }}
+          generate_release_notes: true

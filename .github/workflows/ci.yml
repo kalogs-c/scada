@@ -1,51 +1,75 @@
-name: Go CI
+name: Go Library Release
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
-  build-and-test:
+  validate:
+    name: Format & Mod Check
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.25.x'
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
 
-    - name: Install Raylib dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libgl1-mesa-dev libopenal-dev libasound2-dev libx11-dev libxcursor-dev \
-          libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev libwayland-dev \
-          libpulse-dev libdrm-dev libgbm-dev libudev-dev
-        # Now install raylib itself
-        git clone https://github.com/raysan5/raylib.git
-        cd raylib
-        mkdir build && cd build
-        cmake -DSHARED=ON ..
-        make
-        sudo make install
-        cd ../..
+      - name: Check formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Run 'gofmt -s -w .' to fix formatting"
+            exit 1
+          fi
 
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
+      - name: Go mod tidy & verify
+        run: |
+          go mod tidy
+          go mod verify
 
-    - name: Install dependencies
-      run: go mod download
+  release:
+    name: Create tag & release
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: write
 
-    - name: Run tests
-      run: go test -v ./...
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          latest_tag=$(git tag --sort=-v:refname | grep '^v' | head -n 1)
+          echo "Última tag: $latest_tag"
+          echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+
+      - name: Bump patch version and create tag
+        id: new_tag
+        run: |
+          latest=${{ steps.get_tag.outputs.latest_tag }}
+          if [ -z "$latest" ]; then
+            new_tag="v0.1.0"
+          else
+            IFS='.' read -r major minor patch <<< "${latest#v}"
+            patch=$((patch + 1))
+            new_tag="v$major.$minor.$patch"
+          fi
+          git tag "$new_tag"
+          git push origin "$new_tag"
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.new_tag.outputs.new_tag }}
+          generate_release_notes: true

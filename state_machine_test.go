@@ -2,87 +2,62 @@ package scada
 
 import (
 	"context"
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-type fakeState struct {
-	enterCalled  bool
-	exitCalled   bool
-	updateCalled bool
-	renderCalled bool
-	enterErr     error
-	ctxReceived  context.Context
+type testState struct {
+	entered  bool
+	exited   bool
+	updated  bool
+	rendered bool
 }
 
-func (f *fakeState) Enter(ctx context.Context) error {
-	f.enterCalled = true
-	f.ctxReceived = ctx
-	return f.enterErr
+func (s *testState) Update(dt float32) {
+	s.updated = true
 }
-func (f *fakeState) Exit()             { f.exitCalled = true }
-func (f *fakeState) Update(dt float32) { f.updateCalled = true }
-func (f *fakeState) Render()           { f.renderCalled = true }
 
-func TestAddStateAndChange(t *testing.T) {
-	sm := NewStateMachine()
-	state1 := &fakeState{}
-	state2 := &fakeState{}
-	sm.AddState("s1", state1)
-	sm.AddState("s2", state2)
+func (s *testState) Render() {
+	s.rendered = true
+}
 
-	ctx := context.Background()
-	err := sm.Change(ctx, "s1")
-	if err != nil {
-		t.Errorf("expected no error on first Change, got %v", err)
-	}
-	if !state1.enterCalled {
-		t.Error("Enter should be called on state1")
-	}
-	// Change to state2, should call Exit on state1 and Enter on state2
-	state1.enterCalled = false // reset to check future calls
-	err = sm.Change(ctx, "s2")
-	if err != nil {
-		t.Errorf("expected no error on Change to s2, got %v", err)
-	}
-	if !state1.exitCalled {
-		t.Error("Exit should be called on previous state (state1)")
-	}
-	if !state2.enterCalled {
-		t.Error("Enter should be called on new state (state2)")
+func (s *testState) Exit() {
+	s.exited = true
+}
+
+// factory simples que marca entered
+func newTestState() StateFactory {
+	return func(ctx context.Context, data any) State {
+		s := &testState{}
+		s.entered = true
+		return s
 	}
 }
 
-func TestChangeToNonExistentState(t *testing.T) {
-	sm := NewStateMachine()
-	err := sm.Change(context.Background(), "missing")
-	if err == nil {
-		t.Error("expected error when changing to non-existent state")
-	}
-}
+func TestStateMachine_AddChangeState(t *testing.T) {
+	sm := NewStateMachine[string]()
+	sm.AddState("state1", newTestState())
+	sm.AddState("state2", newTestState())
 
-func TestUpdateAndRenderCallsCurrentState(t *testing.T) {
-	sm := NewStateMachine()
-	state := &fakeState{}
-	sm.AddState("main", state)
-	_ = sm.Change(context.Background(), "main")
+	sm.Change(context.Background(), "state1", nil)
+	curr1 := sm.current
+	require.NotNil(t, curr1, "current state should not be nil")
 
-	sm.Update(0.5)
+	sm.Update(1)
 	sm.Render()
-	if !state.updateCalled {
-		t.Error("Update should call Update on the current state")
-	}
-	if !state.renderCalled {
-		t.Error("Render should call Render on the current state")
-	}
-}
 
-func TestChangePropagatesEnterError(t *testing.T) {
-	sm := NewStateMachine()
-	state := &fakeState{enterErr: errors.New("fail")}
-	sm.AddState("fail", state)
-	err := sm.Change(context.Background(), "fail")
-	if err == nil || err.Error() != "fail" {
-		t.Error("Change should propagate Enter error")
-	}
+	ts1, ok := curr1.(*testState)
+	require.True(t, ok, "current state should be a testState")
+
+	assert.True(t, ts1.updated, "Update should be called on state")
+	assert.True(t, ts1.rendered, "Render should be called on state")
+	assert.True(t, ts1.entered, "state should be marked entered")
+
+	sm.Change(context.Background(), "state2", nil)
+	assert.True(t, ts1.exited, "Exit should be called on previous state")
+
+	curr2 := sm.current
+	assert.NotEqual(t, curr1, curr2, "current state should change after Change")
 }

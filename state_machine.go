@@ -2,48 +2,44 @@ package scada
 
 import (
 	"context"
-	"fmt"
 )
 
 // StateMachine manages different states and handles transitions between them.
-type StateMachine struct {
+type StateMachine[T comparable] struct {
 	current State
-	states  map[string]State
+	states  map[T]StateFactory
 }
 
 // NewStateMachine creates a new StateMachine with optional initial states.
-func NewStateMachine(states ...map[string]State) StateMachine {
-	empty := emptyState{}
-	defaultStates := make(map[string]State)
-	if len(states) > 0 {
-		defaultStates = states[0]
+func NewStateMachine[T comparable]() *StateMachine[T] {
+	return &StateMachine[T]{
+		current: emptyState{},
+		states:  make(map[T]StateFactory),
 	}
-	return StateMachine{current: empty, states: defaultStates}
 }
 
 // AddState registers a new state with the given key.
-func (sm *StateMachine) AddState(stateKey string, state State) {
-	sm.states[stateKey] = state
+func (sm *StateMachine[T]) AddState(stateKey T, factory StateFactory) {
+	sm.states[stateKey] = factory
 }
 
 // Change transitions to a new state by key, calling Exit on the current and Enter on the new state.
-func (sm *StateMachine) Change(ctx context.Context, stateKey string) error {
-	newState, ok := sm.states[stateKey]
+func (sm *StateMachine[T]) Change(ctx context.Context, stateKey T, data any) {
+	factory, ok := sm.states[stateKey]
 	if !ok {
-		return fmt.Errorf("error changing state: state key %s provided does not exists", stateKey)
+		return
 	}
 
 	sm.current.Exit()
-	sm.current = newState
-	return sm.current.Enter(ctx)
+	sm.current = factory(ctx, data)
 }
 
 // Update calls the Update method of the current state.
-func (sm *StateMachine) Update(dt float32) {
+func (sm *StateMachine[T]) Update(dt float32) {
 	sm.current.Update(dt)
 }
 
 // Render calls the Render method of the current state.
-func (sm *StateMachine) Render() {
+func (sm *StateMachine[T]) Render() {
 	sm.current.Render()
 }

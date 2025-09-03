@@ -6,18 +6,18 @@ import (
 )
 
 // Engine is the main application engine that manages the game loop and state machine.
-type Engine struct {
-	sm *StateMachine
+type Engine[StateKey comparable] struct {
+	sm *StateMachine[StateKey]
 }
 
 // NewEngine creates a new Engine instance with the given state machine.
-func NewEngine(sm *StateMachine) Engine {
-	return Engine{sm}
+func NewEngine[T comparable](sm *StateMachine[T]) Engine[T] {
+	return Engine[T]{sm}
 }
 
 // Start initializes the window and runs the main loop using the provided parameters.
 // It handles updating and rendering the current state via the state machine.
-func (e *Engine) Start(width, height int32, title string, targetFps int32) {
+func (e *Engine[T]) Start(width, height int32, title string, targetFps int32) {
 	rl.InitWindow(width, height, title)
 	defer rl.CloseWindow()
 
